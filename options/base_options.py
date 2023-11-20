@@ -9,11 +9,12 @@
 import argparse
 import os
 
+import timm
 import torch
 
-from util import util
+from util import utils
 import models
-import data
+import datasets
 
 
 class BaseOptions():
@@ -23,34 +24,113 @@ class BaseOptions():
     It also gathers additional options defined in <modify_commandline_options> functions in both dataset class and model class.
     """
 
-    def __init__(self):
+    def __init__(self, cmd_line=None):
         self.initialized = False
+        self.cmd_line = None
+        if cmd_line is not None:
+            self.cmd_line = cmd_line.split()
+
+    def str2bool(self, v):
+        """
+        Converts string to bool type; enables command line
+        arguments in the format of '--arg1 true --arg2 false'
+        """
+        if isinstance(v, bool):
+            return v
+        if v.lower() in ('yes', 'true', 't', 'y', '1'):
+            return True
+        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+            return False
+        else:
+            raise argparse.ArgumentTypeError('Boolean value expected.')
 
     def initialize(self, parser):
         """
         Define the common options that are used in both training and test.
         """
-        # basic parameters
-        parser.add_argument('--dataroot', required=True, help='path to dataset')
-        parser.add_argument('--name', type=str, default='experiment_name', help='name of the experiment. It decides where to store samples and models')
-        parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
-        parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
-        # model parameters
-        parser.add_argument('--model', type=str, default='unet', help='chooses which model to use. ')
-        parser.add_argument('--input_nc', type=int, default=1, help='# of input data channels: usually time frame or number of contrasts, or 2 for read and imaginary part')
-        parser.add_argument('--output_nc', type=int, default=1, help='# of output data channels')
-        parser.add_argument('--norm', type=str, default='instance', help='instance normalization or batch normalization [instance | batch | none]') # todo complete this
-        parser.add_argument('--init_type', type=str, default='normal', help='network initialization [normal | xavier | kaiming | orthogonal]')
-        parser.add_argument('--init_gain', type=float, default=0.02, help='scaling factor for normal, xavier and orthogonal.')
-        parser.add_argument('--no_dropout', action='store_true', help='no dropout for the generator')
-        # dataset parameters
-        parser.add_argument('--dataset_mode', type=str, default='mapping', help='chooses how datasets are loaded. [mapping]')
-        parser.add_argument('--serial_batches', action='store_true', help='if true, takes data in order to make batches, otherwise takes them randomly')
-        parser.add_argument('--num_threads', default=4, type=int, help='# threads for loading data')
-        parser.add_argument('--batch_size', type=int, default=1, help='input batch size')
-        parser.add_argument('--max_dataset_size', type=int, default=float("inf"), help='Maximum number of samples allowed per dataset. If the dataset directory contains more than max_dataset_size, only a subset is loaded.')
-        parser.add_argument('--preprocess', type=str, default='resize_and_crop', help='scaling and cropping of images at load time [resize_and_crop | crop | scale_width | scale_width_and_crop | none]')  # todo modify this
-        # additional parameters
-        parser.add_argument('--epoch', type=str, default='latest', help='which epoch to load? set to latest to use latest cached model')
+        # Basic parameters
+        parser.add_argument('--batch_size', default=64, type=int,
+                            help='Per GPU batch size')
+        parser.add_argument('--epochs', default=300, type=int)
+        parser.add_argument('--update_freq', default=1, type=int,
+                            help='gradient accumulation steps')
 
+        # Model parameters
+        parser.add_argument('--model', default='convnext_tiny', type=str, metavar='MODEL',
+                            help='Name of model to train')
+        parser.add_argument('--drop_path', type=float, default=0, metavar='PCT',
+                            help='Drop path rate (default: 0.0)')
+        parser.add_argument('--input_size', default=224, type=int,
+                            help='image input size')
+        parser.add_argument('--layer_scale_init_value', default=1e-6, type=float,
+                            help="Layer scale initial values")
+
+        # EMA related parameters
+        parser.add_argument('--model_ema', type=self.str2bool, default=False)
+        parser.add_argument('--model_ema_decay', type=float, default=0.9999, help='')
+        parser.add_argument('--model_ema_force_cpu', type=self.str2bool, default=False, help='')
+        parser.add_argument('--model_ema_eval', type=self.str2bool, default=False, help='Using ema to eval during training.')
+
+        # Augmentation parameters
+        parser.add_argument('--color_jitter', type=float, default=0.4, metavar='PCT',
+                            help='Color jitter factor (default: 0.4)')
+        parser.add_argument('--aa', type=str, default='rand-m9-mstd0.5-inc1', metavar='NAME',
+                            help='Use AutoAugment policy. "v0" or "original". " + "(default: rand-m9-mstd0.5-inc1)'),
+        parser.add_argument('--smoothing', type=float, default=0.1,
+                            help='Label smoothing (default: 0.1)')
+        parser.add_argument('--train_interpolation', type=str, default='bicubic',
+                            help='Training interpolation (random, bilinear, bicubic default: "bicubic")')
+
+
+
+
+        self.initialized = True
+        return parser
+
+    def gather_options(self):
+        """
+        Initialize our parser with basic options(only once).
+        Add additional model-specific and dataset-specific options.
+        These options are defined in the <modify_commandline_options> function
+        in model and dataset classes.
+        """
+        if not self.initialized:
+            parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+            parser = self.initialize(parser)
+
+        # get the basic options, this is a hook for model and dataset specific options
+        if self.cmd_line is None:
+            opt, _ = parser.parse_known_args()
+        else:
+            opt, _ = parser.parse_known_args(self.cmd_line)
+
+        # modify model_related parser options
+        # model_name = opt.model
+        # model = timm.create_model(model_name, pretrained=False)
+        # model_option_setter = model.modify_commandline_options
+        # parser = model_option_setter(parser)
+        # if self.cmd_line is None:
+        #     opt, _ = parser.parse_known_opt()
+        # else:
+        #     opt, _ = parser.parse_known_opt(self.cmd_line)
+
+        # modify dataset_related parser options
+        # dataset_name = opt.dataset_mode
+        # todo 这里还没实现
+        # dataset_option_setter = datasets.get_option_setter(dataset_name)
+        # parser = dataset_option_setter(parser, self.is_train)
+
+        # save and return the parser
+        if self.cmd_line is None:
+            return parser.parse_args()
+        else:
+            return parser.parse_args(self.cmd_line)
+
+    def parse(self):
+        """Parse options."""
+        # todo 这里放弃了添加后缀和指定gpu的功能，这两个功能可能用不上了
+        opt = self.gather_options()
+        self.opt = opt
+
+        return self.opt
 

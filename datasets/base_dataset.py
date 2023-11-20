@@ -25,17 +25,17 @@ class BaseDataset(Dataset, ABC):
     To create a subclass, you need to implement the following four functions:
     -- <__init__>:                      initialize the class, first call BaseDataset.__init__(self, opt).
     -- <__len__>:                       return the size of dataset.
-    -- <__getitem__>:                   get a data point.
+    -- <__getitem__>:                   get a datasets point.
     -- <modify_commandline_options>:    (optionally) add dataset-specific options and set default options.
     """
 
-    def __init__(self, opt):
+    def __init__(self, opt, is_train):
         """
         Initialize the class; save the options in the class
         :param opt(Option class): stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         self.opt = opt
-        self.root = opt.dataroot
+        self.root = opt.data_path if is_train else opt.eval_data_path
 
     @staticmethod
     def modify_commandline_options(parser, is_train):
@@ -58,10 +58,12 @@ class BaseDataset(Dataset, ABC):
     @abstractmethod
     def __getitem__(self, index):
         """
-        Return a data point and its metadata information.
-        :param index: a random integer for data indexing
-        :return: a dictionary of data with their names. It ususally contains the data itself and its metadata information.
+        Return a datasets point and its metadata information.
+        :param index: a random integer for datasets indexing
+        :return: a dictionary of datasets with their names. It ususally contains the datasets itself and its metadata information.
         """
         pass
 
     # todo some pre-processing functions may be added here
+def get_transform(opt):
+    pass
