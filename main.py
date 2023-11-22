@@ -30,7 +30,6 @@ from options.train_options import TrainOptions
 from datasets import build_dataset
 from optim_factory import create_optimizer, LayerDecayValueAssigner
 from util.utils import NativeScalerWithGradNormCount as NativeScaler
-import models.convnext
 
 def main(args):
     utils.init_distributed_mode(args)
@@ -97,6 +96,7 @@ def main(args):
     else:
         data_loader_val = None
 
+    # following mixup/cutmix schedule should only be used in classification
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
     if mixup_active:
@@ -163,13 +163,7 @@ def main(args):
     print("Number of training examples = %d" % len(dataset_train))
     print("Number of training training per epoch = %d" % num_training_steps_per_epoch)
 
-    if args.layer_decay < 1.0 or args.layer_decay > 1.0:
-        num_layers = 12 # convnext layers divided into 12 parts, each with a different decayed lr value.
-        assert args.model in ['convnext_small', 'convnext_base', 'convnext_large', 'convnext_xlarge'], \
-             "Layer Decay impl only supports convnext_small/base/large/xlarge"
-        assigner = LayerDecayValueAssigner(list(args.layer_decay ** (num_layers + 1 - i) for i in range(num_layers + 2)))
-    else:
-        assigner = None
+    assigner = None
 
     if assigner is not None:
         print("Assigned values = %s" % str(assigner.values))
