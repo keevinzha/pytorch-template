@@ -105,20 +105,19 @@ class BaseOptions():
             opt, _ = parser.parse_known_args(self.cmd_line)
 
         # modify model_related parser options
-        # model_name = opt.model
-        # model = timm.create_model(model_name, pretrained=False)
-        # model_option_setter = model.modify_commandline_options
-        # parser = model_option_setter(parser)
-        # if self.cmd_line is None:
-        #     opt, _ = parser.parse_known_opt()
-        # else:
-        #     opt, _ = parser.parse_known_opt(self.cmd_line)
+        model_name = opt.model
+        model = timm.create_model(model_name, pretrained=False)
+        model_option_setter = model.modify_commandline_options
+        parser = model_option_setter(parser)
+        if self.cmd_line is None:
+            opt, _ = parser.parse_known_opt()
+        else:
+            opt, _ = parser.parse_known_opt(self.cmd_line)
 
         # modify dataset_related parser options
-        # dataset_name = opt.dataset_mode
-        # todo 这里还没实现
-        # dataset_option_setter = datasets.get_option_setter(dataset_name)
-        # parser = dataset_option_setter(parser, self.is_train)
+        dataset_name = opt.dataset_mode
+        dataset_option_setter = datasets.get_option_setter(dataset_name)
+        parser = dataset_option_setter(parser)
 
         # save and return the parser
         if self.cmd_line is None:
@@ -128,9 +127,7 @@ class BaseOptions():
 
     def parse(self):
         """Parse options."""
-        # todo 这里放弃了添加后缀和指定gpu的功能，这两个功能可能用不上了
         opt = self.gather_options()
         self.opt = opt
-
         return self.opt
 
