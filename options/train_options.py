@@ -52,9 +52,9 @@ class TrainOptions(BaseOptions):
                             help='Do not random erase first (clean) augmentation split')
 
         # * Mixup params
-        parser.add_argument('--mixup', type=float, default=0.8,
+        parser.add_argument('--mixup', type=float, default=0,
                             help='mixup alpha, mixup enabled if > 0.')
-        parser.add_argument('--cutmix', type=float, default=1.0,
+        parser.add_argument('--cutmix', type=float, default=0,
                             help='cutmix alpha, cutmix enabled if > 0.')
         parser.add_argument('--cutmix_minmax', type=float, nargs='+', default=None,
                             help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
@@ -81,9 +81,10 @@ class TrainOptions(BaseOptions):
                             help='dataset path for evaluation')
         parser.add_argument('--nb_classes', default=1000, type=int,
                             help='number of the classification types')
+        parser.add_argument('--max_dataset_size', type=int, default=float("inf"))
         parser.add_argument('--imagenet_default_mean_and_std', type=self.str2bool, default=True)
-        parser.add_argument('--data_set', default='IMNET', choices=['CIFAR', 'IMNET', 'image_folder'],
-                            type=str, help='ImageNet dataset path')
+        parser.add_argument('--dataset', default='base',
+                            type=str, help='prefix of your dataset.py')
         parser.add_argument('--output_dir', default='',
                             help='path where to save, empty for no saving')
         parser.add_argument('--log_dir', default=None,
@@ -107,7 +108,7 @@ class TrainOptions(BaseOptions):
                             help='Enabling distributed evaluation')
         parser.add_argument('--disable_eval', type=self.str2bool, default=False,
                             help='Disabling evaluation during training')
-        parser.add_argument('--num_workers', default=10, type=int)
+        parser.add_argument('--num_workers', default=0, type=int)
         parser.add_argument('--pin_mem', type=self.str2bool, default=True,
                             help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
 

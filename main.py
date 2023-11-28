@@ -11,7 +11,10 @@ import os
 import time
 from pathlib import Path
 import numpy as np
-os.environ['CUDA_VISIBLE_DEVICES'] = '3,6'
+
+from losses import MAELoss
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '2, 3'
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -22,7 +25,6 @@ from timm.data.mixup import Mixup
 from timm.models import create_model
 from timm.utils import ModelEma
 
-
 import util.utils as utils
 from engine import evaluate, train_one_epoch
 from util.logger import MetricLogger, SmoothedValue, WandbLogger, TensorboardLogger
@@ -30,6 +32,7 @@ from options.train_options import TrainOptions
 from datasets import build_dataset
 from optim_factory import create_optimizer, LayerDecayValueAssigner
 from util.utils import NativeScalerWithGradNormCount as NativeScaler
+from models import build_model
 
 def main(args):
     utils.init_distributed_mode(args)
@@ -42,12 +45,12 @@ def main(args):
     np.random.seed(seed)
     cudnn.benchmark = True
 
-    dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
+    dataset_train = build_dataset(is_train=True, args=args)
     if args.disable_eval:
         args.dist_eval = False
         dataset_val = None
     else:
-        dataset_val, _ = build_dataset(is_train=False, args=args)
+        dataset_val = build_dataset(is_train=False, args=args)
 
     num_tasks = utils.get_world_size()
     global_rank = utils.get_rank()
@@ -59,8 +62,8 @@ def main(args):
     if args.dist_eval:
         if len(dataset_val) % num_tasks != 0:
             print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
-                    'This will slightly alter validation results as extra duplicate entries are added to achieve '
-                    'equal num of samples per-process.')
+                  'This will slightly alter validation results as extra duplicate entries are added to achieve '
+                  'equal num of samples per-process.')
         sampler_val = torch.utils.data.DistributedSampler(
             dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False)
     else:
@@ -96,15 +99,7 @@ def main(args):
     else:
         data_loader_val = None
 
-
-    model = create_model(
-        args.model,
-        pretrained=False,
-        num_classes=args.nb_classes,
-        drop_path_rate=args.drop_path,
-        layer_scale_init_value=args.layer_scale_init_value,
-        head_init_scale=args.head_init_scale,
-        )
+    model = build_model(args)
 
     if args.finetune:
         if args.finetune.startswith('https'):
@@ -133,11 +128,13 @@ def main(args):
     model_ema = None
     if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
-        model_ema = ModelEma(
-            model,
-            decay=args.model_ema_decay,
-            device='cpu' if args.model_ema_force_cpu else '',
-            resume='')
+        # no_grad() in case model has running stats, this hurts deepcopy
+        with torch.no_grad():
+            model_ema = ModelEma(
+                model,
+                decay=args.model_ema_decay,
+                device='cpu' if args.model_ema_force_cpu else '',
+                resume='')
         print("Using EMA with decay = %.8f" % args.model_ema_decay)
 
     model_without_ddp = model
@@ -168,7 +165,7 @@ def main(args):
         get_num_layer=assigner.get_layer_id if assigner is not None else None,
         get_layer_scale=assigner.get_scale if assigner is not None else None)
 
-    loss_scaler = NativeScaler() # if args.use_amp is False, this won't be used
+    loss_scaler = NativeScaler()  # if args.use_amp is False, this won't be used
 
     print("Use Cosine LR scheduler")
     lr_schedule_values = utils.cosine_scheduler(
@@ -182,7 +179,7 @@ def main(args):
         args.weight_decay, args.weight_decay_end, args.epochs, num_training_steps_per_epoch)
     print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
 
-    criterion = model.get_loss_fn()  # todo get loss function by name
+    criterion = MAELoss()  # todo get loss function by name
 
     print("criterion = %s" % str(criterion))
 
@@ -224,18 +221,16 @@ def main(args):
                     loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema)
         if data_loader_val is not None:
             test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
-            print(f"Accuracy of the model on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-            if max_accuracy < test_stats["acc1"]:
-                max_accuracy = test_stats["acc1"]
+            print(f"Loss of the model on the {len(dataset_val)} test images: {test_stats['loss']:.1f}%")  # todo 这里可以放其他指标
+            if max_accuracy < test_stats["loss"]:
+                max_accuracy = test_stats["loss"]
                 if args.output_dir and args.save_ckpt:
                     utils.save_model(
                         args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                         loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
-            print(f'Max accuracy: {max_accuracy:.2f}%')
+            # print(f'Max accuracy: {max_accuracy:.2f}%')
 
             if log_writer is not None:
-                log_writer.update(test_acc1=test_stats['acc1'], head="perf", step=epoch)
-                log_writer.update(test_acc5=test_stats['acc5'], head="perf", step=epoch)
                 log_writer.update(test_loss=test_stats['loss'], head="perf", step=epoch)
 
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
@@ -274,14 +269,13 @@ def main(args):
     if wandb_logger and args.wandb_ckpt and args.save_ckpt and args.output_dir:
         wandb_logger.log_checkpoints()
 
-
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+
 
 if __name__ == '__main__':
     args = TrainOptions().parse()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)
-

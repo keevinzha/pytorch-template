@@ -241,3 +241,8 @@ class WandbLogger(object):
         # Set epoch-wise step
         self._wandb.define_metric('Global Train/*', step_metric='epoch')
         self._wandb.define_metric('Global Test/*', step_metric='epoch')
+
+    def log_images(self, images, step):
+        columns = ['UnderSample', 'FullSample', 'Reconstruction']
+        tabel = self._wandb.Table(columns=columns)
+

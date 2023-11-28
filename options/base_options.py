@@ -15,6 +15,7 @@ import torch
 from util import utils
 import models
 import datasets
+from models import build_model
 
 
 class BaseOptions():
@@ -106,16 +107,15 @@ class BaseOptions():
 
         # modify model_related parser options
         model_name = opt.model
-        model = timm.create_model(model_name, pretrained=False)
-        model_option_setter = model.modify_commandline_options
+        model_option_setter = models.get_option_setter(model_name)
         parser = model_option_setter(parser)
         if self.cmd_line is None:
-            opt, _ = parser.parse_known_opt()
+            opt, _ = parser.parse_known_args()
         else:
-            opt, _ = parser.parse_known_opt(self.cmd_line)
+            opt, _ = parser.parse_known_args(self.cmd_line)
 
         # modify dataset_related parser options
-        dataset_name = opt.dataset_mode
+        dataset_name = opt.dataset
         dataset_option_setter = datasets.get_option_setter(dataset_name)
         parser = dataset_option_setter(parser)
 

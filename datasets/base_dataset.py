@@ -38,7 +38,7 @@ class BaseDataset(Dataset, ABC):
         self.root = opt.data_path if is_train else opt.eval_data_path
 
     @staticmethod
-    def modify_commandline_options(parser, is_train):
+    def modify_commandline_options(parser):
         """
         Add new dataset-specific options, and rewrite default values for existing options.
         :param parser: original option parser
@@ -63,7 +63,3 @@ class BaseDataset(Dataset, ABC):
         :return: a dictionary of datasets with their names. It ususally contains the datasets itself and its metadata information.
         """
         pass
-
-    # todo some pre-processing functions may be added here
-def get_transform(opt):
-    pass

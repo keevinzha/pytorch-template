@@ -15,6 +15,7 @@ from timm.data import Mixup
 from timm.utils import accuracy, ModelEma
 
 from util.logger import MetricLogger, SmoothedValue
+from losses import MAELoss
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
@@ -32,7 +33,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
     optimizer.zero_grad()
 
-    for data_iter_step, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, (samples, targets, mask) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         step = data_iter_step // update_freq
         if step >= num_training_steps_per_epoch:
             continue
@@ -45,6 +46,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 if wd_schedule_values is not None and param_group["weight_decay"] > 0:
                     param_group["weight_decay"] = wd_schedule_values[it]
 
+
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
@@ -53,11 +55,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         if use_amp:
             with torch.cuda.amp.autocast():
-                output = model(samples)
-                loss = criterion(output, targets)
+                output = model(samples, mask)
+                loss = criterion(output, targets, 10)
         else:  # full precision
-            output = model(samples)
-            loss = criterion(output, targets)
+            output = model(samples, mask)
+            loss = criterion(output, targets, 10)
 
         loss_value = loss.item()
 
@@ -88,7 +90,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         torch.cuda.synchronize()
 
         if mixup_fn is None:
-            class_acc = (output.max(-1)[-1] == targets).float().mean()
+            class_acc = None
         else:
             class_acc = None
         metric_logger.update(loss=loss_value)
@@ -139,38 +141,34 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 @torch.no_grad()
 def evaluate(data_loader, model, device, use_amp=False):
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = MAELoss()
 
     metric_logger = MetricLogger(delimiter="  ")
     header = 'Test:'
 
     # switch to evaluation mode
     model.eval()
-    for batch in metric_logger.log_every(data_loader, 10, header):
-        images = batch[0]
-        target = batch[-1]
+    for (sample, target, mask) in metric_logger.log_every(data_loader, 10, header):
 
-        images = images.to(device, non_blocking=True)
+        sample = sample.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
+        mask = mask.to(device, non_blocking=True)
 
         # compute output
         if use_amp:
             with torch.cuda.amp.autocast():
-                output = model(images)
-                loss = criterion(output, target)
+                output = model(sample, mask)
+                loss = criterion(output, target, 10)
         else:
-            output = model(images)
-            loss = criterion(output, target)
+            output = model(sample, mask)
+            loss = criterion(output, target, 10)
 
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
 
-        batch_size = images.shape[0]
+        batch_size = sample.shape[0]
         metric_logger.update(loss=loss.item())
-        metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
-        metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
-    print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
-          .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
+    print('* loss {losses.global_avg:.3f}'
+          .format(losses=metric_logger.loss))
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
