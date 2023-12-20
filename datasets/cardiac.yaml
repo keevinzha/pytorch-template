@@ -1,0 +1,9 @@
+# Paths
+path: /data/disk1/datasets/T1map_dataset/yolo
+train: /data/disk1/datasets/T1map_dataset/yolo/images/train
+val: /data/disk1/datasets/T1map_dataset/yolo/images/val
+test: /data/disk1/datasets/T1map_dataset/yolo/images/test
+
+# Classes
+names:
+  0: cardiac
