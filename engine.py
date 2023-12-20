@@ -8,6 +8,7 @@
 
 import math
 from typing import Iterable, Optional
+import numpy as np
 
 import torch
 
@@ -89,10 +90,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         torch.cuda.synchronize()
 
-        if mixup_fn is None:
-            class_acc = None
-        else:
-            class_acc = None
+        class_acc = None  # dont need class acc for regression todo: remove this
         metric_logger.update(loss=loss_value)
         metric_logger.update(class_acc=class_acc)
         min_lr = 10.
@@ -127,6 +125,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 'Rank-0 Batch Wise/train_max_lr': max_lr,
                 'Rank-0 Batch Wise/train_min_lr': min_lr
             }, commit=False)
+
+            label = targets[0].cpu().numpy()
+            label = label[:, :, :, 1]
+            pred = output[-1].detach().cpu().numpy()
+            # pred = pred[0, :, :, :, 1]
+            wandb_logger.log_images(pred, epoch, data_iter_step, 'image')
+
             if class_acc:
                 wandb_logger._wandb.log({'Rank-0 Batch Wise/train_class_acc': class_acc}, commit=False)
             if use_amp:

@@ -8,14 +8,13 @@
 
 import torch
 
-from util.recon_tools import ifft1c
+from util.recon_tools import ifft1c, fft1c
 
 def mae_loss(pred, target, niter):
-    target = ifft1c(target, 2)
-    pred_length = 4
+    target = ifft1c(target, 3)
     cost_all = 0
     for i in range(niter):
-        pred_per_iter = ifft1c(pred[i], 2)
+        pred_per_iter = ifft1c(pred[i], 3)
         error = torch.abs(target - pred_per_iter)
         cost = torch.mean(torch.sum(error, dim=tuple(range(len(pred[0].shape)))[1:]), dim=0)
         cost_all += cost
