@@ -9,12 +9,16 @@
 import time
 import datetime
 from collections import deque, defaultdict
+import cv2
+import numpy as np
 
 import torch
 import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 
 from util.utils import is_dist_avail_and_initialized
+from util.recon_tools import ifft2c, fft2c, sos, ifft1c
+from util.Tools_torch import *
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -242,7 +246,53 @@ class WandbLogger(object):
         self._wandb.define_metric('Global Train/*', step_metric='epoch')
         self._wandb.define_metric('Global Test/*', step_metric='epoch')
 
-    def log_images(self, images, step):
-        columns = ['UnderSample', 'FullSample', 'Reconstruction']
-        tabel = self._wandb.Table(columns=columns)
+    def log_images(self, image, epoch, step, data_type):
+        """
+        Log images onto W&B.
+        """
+        image_converter = ImageConverter(image)
+        #image = image.detach().cpu().numpy()
+        image = image_converter.convert(image, data_type)
+        self._wandb.log({'image': self._wandb.Image(image, 'L', caption="epoch:{} step:{}".format(epoch, step))}, commit=False)
 
+
+class ImageConverter(object):
+    def __init__(self, data):
+        self.data = data
+
+    def convert(self, data, data_type='kspace'):
+        if data_type == 'kspace':
+            image = self._convert_kspace(data)
+            image = self._normalize(image)
+            return image
+        elif data_type == 'map':
+            image = self._normalize(data)
+            image = self._convert_to_jet(image)
+            return image
+        elif data_type == 'image':
+            image = data
+            image = np.transpose(image, (0, 2, 3, 1, 4))
+            image = np_ifft1c_hybrid(image, 1)
+            # image = np_ifft1c_hybrid(image, 2)
+            image = abs(image[0, :, :, 0, 0])
+            # image = sos(image, 0)
+            image = self._normalize(image)
+            return image
+        else:
+            raise ValueError('type must be kspace or image or map')
+
+    def _convert_kspace(self, data):
+        img_multicoil = ifft2c(data)
+        img = sos(img_multicoil, 0)
+        return img
+
+    def _convert_image(self, data):
+        pass
+
+    def _normalize(self, image):
+        image = image / image.max() * 255
+        return image
+
+    def _convert_to_jet(self, image):
+        jet_image = cv2.applyColorMap(np.uint8(image), cv2.COLORMAP_JET)
+        return jet_image
