@@ -9,7 +9,7 @@
 import math
 import os
 from pathlib import Path
-
+import cv2
 import numpy as np
 
 import torch
@@ -17,6 +17,9 @@ import torch.distributed as dist
 from torch import inf
 
 from timm.utils import get_state_dict
+
+from util.recon_tools import ifft2c, sos
+from datasets import read_data
 
 
 def is_dist_avail_and_initialized():
@@ -289,3 +292,30 @@ def auto_load_model(args, model, model_without_ddp, optimizer, loss_scaler, mode
 def mkdir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
+
+def yolobbox_to_mask(bbox, shape):
+    """
+    :param bbox: [x_center, y_center, width, height]
+    :param shape: [height, width]
+    :return: mask
+    """
+    mask = np.zeros(shape, dtype=np.uint8)
+    x0, y0, x1, y1 = bbox.astype(np.int32)
+    mask[y0:y1, x0:x1] = 1
+    return mask
+
+def mat_to_yolo_input(mat_path):
+    """
+    :param mat_path: path of mat file
+    :param jpg_path: path of jpg file
+    :return:
+    """
+    data = read_data(mat_path, 'kspace')
+    img = ifft2c(data[:, :, :, 5], (0, 1))
+    img = sos(img, 2)
+    img = img.astype(np.float32)
+    img = img / np.max(img) * 255
+    img = img.astype(np.uint8)
+    img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    return img
