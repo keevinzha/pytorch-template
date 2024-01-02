@@ -141,10 +141,45 @@ def crop_existing_data():
                     cropped_data = crop_image_data(data, nx_range, ny_range)
                     scio.savemat(os.path.join(output_path, file), {'mask': cropped_data})
 
+def single_slice_to_multislice(args):
+    """
+    Convert single slice kspace data to multislice kspace data
+    """
+    for base_dir, dirs, files in os.walk(args.singleslice_output_root):
+        if not dirs:
+            for file in sorted(files):
+                if 'T1map.mat' in file:
+                    data_path = os.path.join(base_dir, file)
+                    base_name = os.path.basename(base_dir)
+                    output_path = os.path.join(args.multislice_output_root, base_name)
+                    mkdir(output_path)
 
+                    data = read_data(data_path, 'kspace')
+                    if '0' in file:
+                        multislice_data = np.expand_dims(data, axis=2)
+                    else:
+                        multislice_data = np.concatenate((multislice_data, np.expand_dims(data, axis=2)), axis=2)
+            scio.savemat(os.path.join(output_path, 'T1map.mat'), {'kspace': multislice_data})
+
+def copy_csv(args):
+    """
+    Copy csv file to the new directory
+    """
+    for base_dir, dirs, files in os.walk(args.original_data_root):
+        if not dirs:
+            for file in files:
+                if 'T1map.csv' in file:
+                    data_path = os.path.join(base_dir, file)
+                    base_name = os.path.basename(base_dir)
+                    output_path = os.path.join(args.processed_data_root, base_name)
+                    mkdir(output_path)
+
+                    cmd_command = 'cp' + ' ' + data_path + ' ' + output_path
+                    os.system(cmd_command)
 
 
 
 if __name__ == '__main__':
     opt = ProcessDataOptions().parse()
-
+    single_slice_to_multislice(opt)
+    copy_csv(opt)
