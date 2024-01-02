@@ -65,7 +65,7 @@ class BaseOptions():
                             help='image input size')
         parser.add_argument('--layer_scale_init_value', default=1e-6, type=float,
                             help="Layer scale initial values")
-        parser.add_argument('--input_channels', default=1, type=int)
+        parser.add_argument('--input_channels', default=9, type=int)
 
         # EMA related parameters
         parser.add_argument('--model_ema', type=self.str2bool, default=False)

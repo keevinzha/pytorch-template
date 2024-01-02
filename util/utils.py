@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import cv2
 import numpy as np
+from ultralytics import YOLO
 
 import torch
 import torch.distributed as dist
@@ -319,3 +320,19 @@ def mat_to_yolo_input(mat_path):
     img = img.astype(np.uint8)
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     return img
+
+def yolo_detect_cardic(kspace, model='./pretrained_models/best.pt'):
+    '''
+    :param kspace: kspace data, shape[nx, ny, ti]
+    :param model: pretrained model path
+    :return: mask
+    '''
+    try:
+        model = YOLO(model)
+        data = mat_to_yolo_input(kspace)
+        results = model([data], verbose=False)
+        boxes = results[0].boxes.xyxy[0].cpu().numpy()
+        mask = yolobbox_to_mask(boxes, (128, 128))
+        return mask
+    except:
+        return np.zeros((128, 128), dtype=np.uint8)

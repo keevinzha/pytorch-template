@@ -12,14 +12,14 @@ import time
 from pathlib import Path
 import numpy as np
 
-from losses import MAELoss
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
 
 import torch
 import torch.backends.cudnn as cudnn
 from timm.loss import SoftTargetCrossEntropy, LabelSmoothingCrossEntropy
 from torch.utils.data import DataLoader
+from torch.nn import MSELoss
 
 from timm.data.mixup import Mixup
 from timm.models import create_model
@@ -33,6 +33,7 @@ from datasets import build_dataset
 from optim_factory import create_optimizer, LayerDecayValueAssigner
 from util.utils import NativeScalerWithGradNormCount as NativeScaler
 from models import build_model
+from losses import MAELoss
 
 def main(args):
     utils.init_distributed_mode(args)
@@ -179,7 +180,7 @@ def main(args):
         args.weight_decay, args.weight_decay_end, args.epochs, num_training_steps_per_epoch)
     print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
 
-    criterion = MAELoss()  # todo get loss function by name
+    criterion = MSELoss()  # todo get loss function by name
 
     print("criterion = %s" % str(criterion))
 
@@ -265,6 +266,7 @@ def main(args):
 
         if wandb_logger:
             wandb_logger.log_epoch_metrics(log_stats)
+
 
     if wandb_logger and args.wandb_ckpt and args.save_ckpt and args.output_dir:
         wandb_logger.log_checkpoints()

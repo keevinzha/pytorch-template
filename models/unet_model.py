@@ -48,7 +48,7 @@ class Upsample(nn.Module):
 class UnetModel(BaseModel):
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
-        pass
+        return parser
 
     def __init__(self, opt):
         super(UnetModel, self).__init__()
@@ -78,7 +78,7 @@ class UnetModel(BaseModel):
             nn.ReLU(inplace=True)
         )
 
-    def forward(self, x):
+    def forward(self, x, mask):
         x1 = self.input_layer(x) + self.input_skip(x)
         x2 = self.residual_conv1(x1)
         x3 = self.residual_conv2(x2)

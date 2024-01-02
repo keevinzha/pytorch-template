@@ -88,7 +88,6 @@ def read_data(path, key:str):
         data = scio.loadmat(path)
         data = data[key][:]
     except ValueError:
-        # use mat73 to read mat file, which keep dimension of data
-        f = mat73.loadmat(path)
+        f = h5py.File(path, 'r')
         data = f[key][:]
     return data

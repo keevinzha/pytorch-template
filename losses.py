@@ -27,3 +27,4 @@ class MAELoss(torch.nn.Module):
 
     def forward(self, pred, target, niter):
         return mae_loss(pred, target, niter)
+

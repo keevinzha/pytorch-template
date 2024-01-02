@@ -11,6 +11,7 @@ from typing import Iterable, Optional
 import numpy as np
 
 import torch
+from torch.nn import MSELoss
 
 from timm.data import Mixup
 from timm.utils import accuracy, ModelEma
@@ -57,10 +58,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         if use_amp:
             with torch.cuda.amp.autocast():
                 output = model(samples, mask)
-                loss = criterion(output, targets, 10)
+                loss = criterion(output, targets)
         else:  # full precision
             output = model(samples, mask)
-            loss = criterion(output, targets, 10)
+            loss = criterion(output, targets)
 
         loss_value = loss.item()
 
@@ -127,10 +128,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             }, commit=False)
 
             label = targets[0].cpu().numpy()
-            label = label[:, :, :, 1]
-            pred = output[-1].detach().cpu().numpy()
-            # pred = pred[0, :, :, :, 1]
-            wandb_logger.log_images(pred, epoch, data_iter_step, 'image')
+            label = label[0, :, :]
+            pred = output[0].detach().cpu().numpy()
+            pred = pred[0, :, :]
+            img = np.concatenate([label, pred], axis=1)
+            wandb_logger.log_images(img, epoch, data_iter_step, 'map')
 
             if class_acc:
                 wandb_logger._wandb.log({'Rank-0 Batch Wise/train_class_acc': class_acc}, commit=False)
@@ -146,7 +148,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 @torch.no_grad()
 def evaluate(data_loader, model, device, use_amp=False):
-    criterion = MAELoss()
+    criterion = MSELoss()
 
     metric_logger = MetricLogger(delimiter="  ")
     header = 'Test:'
@@ -163,10 +165,10 @@ def evaluate(data_loader, model, device, use_amp=False):
         if use_amp:
             with torch.cuda.amp.autocast():
                 output = model(sample, mask)
-                loss = criterion(output, target, 10)
+                loss = criterion(output, target)
         else:
             output = model(sample, mask)
-            loss = criterion(output, target, 10)
+            loss = criterion(output, target)
 
 
         batch_size = sample.shape[0]

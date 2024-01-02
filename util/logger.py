@@ -253,7 +253,7 @@ class WandbLogger(object):
         image_converter = ImageConverter(image)
         #image = image.detach().cpu().numpy()
         image = image_converter.convert(image, data_type)
-        self._wandb.log({'image': self._wandb.Image(image, 'L', caption="epoch:{} step:{}".format(epoch, step))}, commit=False)
+        self._wandb.log({'image': self._wandb.Image(image, 'RGB', caption="epoch:{} step:{}".format(epoch, step))}, commit=False)
 
 
 class ImageConverter(object):
@@ -272,7 +272,7 @@ class ImageConverter(object):
         elif data_type == 'image':
             image = data
             image = np.transpose(image, (0, 2, 3, 1, 4))
-            image = np_ifft1c_hybrid(image, 1)
+            image = ifft1c(image, 1)
             # image = np_ifft1c_hybrid(image, 2)
             image = abs(image[0, :, :, 0, 0])
             # image = sos(image, 0)

@@ -48,9 +48,6 @@ class T1ReconDataset(BaseDataset):
         t1map = read_data(self.t1map_paths[index], 'T1map')
         sample = kspace * np.expand_dims(mask, 2)
         target = kspace
-        sample = self._crop(sample)
-        target = self._crop(target)
-        mask = self._crop(mask)
         sample = np.transpose(sample, (2, 0, 1, 3))
         target = np.transpose(target, (2, 0, 1, 3))
         mask = np.expand_dims(mask, 0)
@@ -62,8 +59,4 @@ class T1ReconDataset(BaseDataset):
         :return: int
         """
         return len(self.kspace_paths)
-
-    def _crop(self, data):
-        data = data[9:9+128, 9:9+128,...]
-        return data
 
