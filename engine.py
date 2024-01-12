@@ -131,8 +131,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             label = label[0, :, :]
             pred = output[0].detach().cpu().numpy()
             pred = pred[0, :, :]
+            input = samples[0].detach().cpu().numpy()
+            input = input[0, :, :]
             img = np.concatenate([label, pred], axis=1)
             wandb_logger.log_images(img, epoch, data_iter_step, 'map')
+            wandb_logger.log_images(input, epoch, data_iter_step, 'image')
 
             if class_acc:
                 wandb_logger._wandb.log({'Rank-0 Batch Wise/train_class_acc': class_acc}, commit=False)

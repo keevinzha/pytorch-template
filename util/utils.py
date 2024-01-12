@@ -313,7 +313,7 @@ def mat_to_yolo_input(mat_path):
     :return:
     """
     data = read_data(mat_path, 'kspace')
-    img = ifft2c(data[:, :, :, 5], (0, 1))
+    img = ifft2c(data[:, :, :, 0], (0, 1))
     img = sos(img, 2)
     img = img.astype(np.float32)
     img = img / np.max(img) * 255

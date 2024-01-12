@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 3, 4, 5, 6, 7'
 
 import torch
 import torch.backends.cudnn as cudnn
