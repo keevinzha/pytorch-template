@@ -9,9 +9,9 @@
 import importlib
 
 from .base_model import BaseModel
+from util.utils import dy
 
-
-def find_model_using_name(model_name):# TODO 不支持timm的模型，同时对模型的名称有限制
+def find_model_using_name(model_name):
     """Import the module "models/[model_name]_model.py".
 
     In the file, the class called DatasetNameModel() will
