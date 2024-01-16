@@ -8,7 +8,6 @@
 
 import math
 import os
-from typing import Union
 from pathlib import Path
 import cv2
 import numpy as np
@@ -23,40 +22,6 @@ from timm.utils import get_state_dict
 from util.recon_tools import ifft2c, sos
 from datasets import read_data
 
-class TemporaryPath(object):
-    def __init__(self,path):
-        self.path = path
-    
-    def __enter__(self):
-        sys.path.append(str(self.path))
-        return self
-
-    def __exit__(self):
-        sys.path.remove(str(self.path))
-
-def dynamic_loading(filepath:Union[Path,str], contents:List):
-    """
-    Dynamically loading specific instances from a python project file
-    :param filepath: path of .py file
-    :param contents: object to be loaded e.g. class define, method define or some variable
-    :return Dict[content_name:content_value], e.g. {"Network":<torch.nn.Module>,"PATH":"./network"}
-            if content_name not in pyfile, there will no key in result dict
-    """
-    if isinstance(filepath, str):
-        filepath = Path(filepath)
-    if not filepath.exists():
-        raise ValueError(f"Except {filepath} exisit!")
-    parent_path = str(filepath.parent)
-    file_name = filepath.stem
-    result = {}
-    with TemporaryPath(parent_path) as tf:
-        module_ = import_module(file_name)
-        try:
-            for content in contents:
-                result[content] = eval(f'module_.{content}')  # drity import
-        except:
-            pass
-    return result
 
 def is_dist_avail_and_initialized():
     if not dist.is_available():
