@@ -12,8 +12,8 @@ import time
 from pathlib import Path
 import numpy as np
 
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 3, 4, 5, 6, 7'
+if 'CUDA_VISIBLE_DEVICES' not in os.environ: # Supports user can define this environment variable in console
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 3, 4, 5, 6, 7'
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -27,13 +27,14 @@ from timm.utils import ModelEma
 
 import util.utils as utils
 from engine import evaluate, train_one_epoch
-from util.logger import MetricLogger, SmoothedValue, WandbLogger, TensorboardLogger
+from util.logger import MetricLogger, SmoothedValue, WandbLogger, TensorboardLogger,TimingLogger 
 from options.train_options import TrainOptions
 from datasets import build_dataset
 from optim_factory import create_optimizer, LayerDecayValueAssigner
 from util.utils import NativeScalerWithGradNormCount as NativeScaler
 from models import build_model
 from losses import MAELoss
+
 
 def main(args):
     utils.init_distributed_mode(args)
@@ -42,9 +43,22 @@ def main(args):
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    cudnn.benchmark = True
+    # It may not be possible to absolutely fix random seeds
+    if not args.strict_seed:
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        cudnn.benchmark = True
+    else:
+        # will reduce the training speed
+        random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.enabled = False
 
     dataset_train = build_dataset(is_train=True, args=args)
     if args.disable_eval:
@@ -119,7 +133,7 @@ def main(args):
         if checkpoint_model is None:
             checkpoint_model = checkpoint
         state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias']:
+        for k in ['head.weight', 'head.bias']: # TODO: 这里写死了待删除的参数名
             if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
@@ -140,9 +154,10 @@ def main(args):
 
     model_without_ddp = model
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
+    size_parameters = sum(p.numel()*p.dtype.itemsize() for p in model.parameters() if p.requires_grad)
     print("Model = %s" % str(model_without_ddp))
     print('number of params:', n_parameters)
+    print('size of params:',round(size_parameters/1024,4),"KByte")
 
     total_batch_size = args.batch_size * args.update_freq * utils.get_world_size()
     num_training_steps_per_epoch = len(dataset_train) // total_batch_size
@@ -168,6 +183,7 @@ def main(args):
 
     loss_scaler = NativeScaler()  # if args.use_amp is False, this won't be used
 
+    # TODO: 调度器的可选性
     print("Use Cosine LR scheduler")
     lr_schedule_values = utils.cosine_scheduler(
         args.lr, args.min_lr, args.epochs, num_training_steps_per_epoch,
@@ -180,6 +196,7 @@ def main(args):
         args.weight_decay, args.weight_decay_end, args.epochs, num_training_steps_per_epoch)
     print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
 
+    # TODO: 损失函数的可选性
     criterion = MSELoss()  # todo get loss function by name
 
     print("criterion = %s" % str(criterion))
@@ -200,6 +217,7 @@ def main(args):
 
     print("Start training for %d epochs" % args.epochs)
     start_time = time.time()
+    timming_logger = TimingLogger() if global_rank == 0 else None
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -222,7 +240,7 @@ def main(args):
                     loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema)
         if data_loader_val is not None:
             test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
-            print(f"Loss of the model on the {len(dataset_val)} test images: {test_stats['loss']:.1f}%")  # todo 这里可以放其他指标
+            print(f"Loss of the model on the {len(dataset_val)} test images: {test_stats['loss']:.1f}%")  # TODO: 这里可以放其他指标
             if max_accuracy < test_stats["loss"]:
                 max_accuracy = test_stats["loss"]
                 if args.output_dir and args.save_ckpt:
@@ -233,6 +251,7 @@ def main(args):
 
             if log_writer is not None:
                 log_writer.update(test_loss=test_stats['loss'], head="perf", step=epoch)
+            
 
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                          **{f'test_{k}': v for k, v in test_stats.items()},
@@ -266,6 +285,12 @@ def main(args):
 
         if wandb_logger:
             wandb_logger.log_epoch_metrics(log_stats)
+        
+        if global_rank == 0:
+            timming_logger.step()
+            if timming_logger.value is not None:
+                print(f'Remaining time: {int(timming_logger.value)*(args.epochs-epoch) // 60} min'
+                        f' {int(timming_logger.value*(args.epochs-epoch)) % 60:.2f} s')
 
 
     if wandb_logger and args.wandb_ckpt and args.save_ckpt and args.output_dir:
