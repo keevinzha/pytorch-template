@@ -8,9 +8,9 @@
 
 import os
 import importlib
-import scipy.io as scio
-import h5py
-import mat73
+# import scipy.io as scio
+# import h5py
+# import mat73
 
 from torchvision import datasets, transforms
 
@@ -19,37 +19,43 @@ from timm.data.constants import \
 from timm.data import create_transform
 
 from .base_dataset import BaseDataset
+from util.utils import dynamic_loading
 
-def find_dataset_using_name(dataset_name):
-    """Import the module "data/[dataset_name]_dataset.py".
+
+def find_dataset_using_name(dataset_name:str, pyfile_path:str = None):
+    """Import the module "datasets/[dataset_name]_dataset.py" by default setting.
 
     In the file, the class called DatasetNameDataset() will
     be instantiated. It has to be a subclass of BaseDataset,
     and it is case-insensitive.
+    :param dataset_name: the name of dataset while pyfile_path is None, 
+                         
+    :param pyfile_path: 
     """
-    dataset_filename = "datasets." + dataset_name + "_dataset"
-    datasetlib = importlib.import_module(dataset_filename)
-
-    dataset = None
-    target_dataset_name = dataset_name.replace('_', '') + 'dataset'
-    for name, cls in datasetlib.__dict__.items():
-        if name.lower() == target_dataset_name.lower() \
-           and issubclass(cls, BaseDataset):
-            dataset = cls
-
+    if pyfile_path is None:
+        dataset_filename = "datasets." + dataset_name + "_dataset"
+        datasetlib = importlib.import_module(dataset_filename)
+        dataset = None
+        target_dataset_name = dataset_name.replace('_', '') + 'dataset'
+        for name, cls in datasetlib.__dict__.items():
+            if name.lower() == target_dataset_name.lower() \
+            and issubclass(cls, BaseDataset):
+                dataset = cls
+    else:
+        dynamic_content = dynamic_loading(pyfile_path,[dataset_name]) # dict
+        dataset = dynamic_content[dataset_name] if dataset_name in dynamic_content \
+                                                    and issubclass(dynamic_content[dataset_name],BaseDataset) else None
     if dataset is None:
         raise NotImplementedError("In %s.py, there should be a subclass of BaseDataset with class name that matches %s in lowercase." % (dataset_filename, target_dataset_name))
-
     return dataset
 
 
 def build_dataset(is_train, args):
     data_path = args.data_path if is_train else args.eval_data_path
-    build_datafile_list(data_path, args.max_dataset_size)
+    # build_datafile_list(data_path, args.max_dataset_size)
     # todo 这里还没改完，这里应该返回数据集dataset
     dataset_class = find_dataset_using_name(args.dataset)
     dataset = dataset_class(args, is_train)
-
     return dataset
 
 
@@ -76,18 +82,18 @@ def get_option_setter(dataset_name):
     dataset_class = find_dataset_using_name(dataset_name)
     return dataset_class.modify_commandline_options
 
-
-def read_data(path, key:str):
-    """
-    Read data from path
-    :param path: path of data
-    :param key: key of data
-    :return: data
-    """
-    try:
-        data = scio.loadmat(path)
-        data = data[key][:]
-    except ValueError:
-        f = h5py.File(path, 'r')
-        data = f[key][:]
-    return data
+# TODO: 数据集相关的感觉放在特定的utils或者用户编写的dataset.py比较好
+# def read_data(path, key:str):
+#     """
+#     Read data from path
+#     :param path: path of data
+#     :param key: key of data
+#     :return: data
+#     """
+#     try:
+#         data = scio.loadmat(path)
+#         data = data[key][:]
+#     except ValueError:
+#         f = h5py.File(path, 'r')
+#         data = f[key][:]
+#     return data
