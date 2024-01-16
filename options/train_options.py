@@ -92,6 +92,9 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--device', default='cuda',
                             help='device to use for training / testing')
         parser.add_argument('--seed', default=0, type=int)
+        parser.add_argument('--strict_seed', default=False,
+                             type=bool,help='whether the seed be absolutely fixed.'
+                              '(May reduce training speed)', aliases=['ss'])
 
         parser.add_argument('--resume', default='',
                             help='resume from checkpoint')
