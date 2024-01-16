@@ -31,3 +31,6 @@ class BaseModel(nn.Module):
         :return: metrics
         """
         return torch.nn.MSELoss()
+
+class FLBaseModel(BaseModel):
+    pass

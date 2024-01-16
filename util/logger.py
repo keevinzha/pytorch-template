@@ -258,7 +258,26 @@ class WandbLogger(object):
         else:
             self._wandb.log({'image': self._wandb.Image(image, 'L', caption="epoch:{} step:{}".format(epoch, step))}, commit=False)
 
+class TimingLogger(object):
+    def __init__(self):
+        self.last_time = None
+        self.interval = 0
+        self.count = 0
+    
+    def step(self,step_size:int = 1):
+        if self.last_time is None:
+            self.last_time = time.time()
+        else:
+            tmp_time = self.last_time
+            self.last_time = time.time()
+            self.interval += self.last_time - tmp_time
+            self.count += step_size
+    
+    @property()
+    def value(self):
+        return self.interval / self.count if self.count != 0 else None
 
+    
 
 class ImageConverter(object):
     def __init__(self, data):
